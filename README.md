@@ -1,24 +1,24 @@
-YAPCache
-========
+YOURLS APCu Cache 
+=================
 
-YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
+An APCu based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
 
-YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. YAPCache will write data back to the database based on either the time since the last write or the amount of data currently cached. YAPCache also adds an [API call](#flushing-the-cache-with-an-api-call) to YOURLS that can be used to force a write out to the database.
+APCu Cache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. APCu Cache will write data back to the database based on either the time since the last write or the amount of data currently cached. APCu Cache also adds an [API call](#flushing-the-cache-with-an-api-call) to YOURLS that can be used to force a write out to the database.
 
-YAPCache is a fork of [Ian Barber's YOURLS APC Cache](https://github.com/ianbarber/Yourls-APC-Cache), with a few changes [listed below](#difference-from-yourls-apc-cache). You should not try to install both plugins at the same time!
+APCu Cache is a fork of [Chris Hastie's YAPCache](https://github.com/tipichris/YAPCache), with a few changes [listed below](#difference-from-yapcache). You should not try to install both plugins at the same time!
 
 
 Installation
 ------------
 
-0. If you previously used another APC cache with YOURLS, uninstall it
-1. Download the latest version of YAPCache
+0. If you previously used another APC(u) cache with YOURLS, uninstall it
+1. Download the latest version of APCu Cache
 2. Copy the `plugins/yapcache` folder into your `user/plugins` folder for YOURLS
-3. Set up the parameters for YAPCache in your YOURLS configuration file, `user/config.php` ([see below](#configuration))
+3. Set up the parameters for APCu Cache in your YOURLS configuration file, `user/config.php` ([see below](#configuration))
 4. Copy the `cache.php` file into `user/`
 5. There is no need to activate this plugin (by the same token, deactivating it via the admin panel will not disable it—to do that remove or rename `user/cache.php`)
 
-A recent version of APC is required.
+A recent version of APCu is required.
 
 Operation
 ---------
@@ -137,27 +137,12 @@ If you are potentially caching large numbers of updates, a request that triggers
 _Interger. Default: 301_  
 The HTTP status code to send with redirects when YAPC_REDIRECT_FIRST is true. Defaults to 301 (moved permanantly). 302 is the most likely alternative (although 303 or 307 are possible). Has no effect if YAPC_REDIRECT_FIRST is false
 
-Difference from Yourls-APC-Cache
---------------------------------
+Difference from YAPCache
+------------------------
 
-The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache are summarised below
+The main differences between APCu Cache and Ian Barber's original YAPCache are summarised below
 
-* YAPCache uses a different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated in the database at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
+* APCu Cache uses the APCu PHP module instead of APC Pecl.
 
-* YAPCache uses a different approach to timers. YAPCache writes the time into an APC key and then checks that, rather than relying on the key's TTL. This allows a bit more flexibility in the logic of when to write out to the database, allowing some other changes, including
-
-  * An option to do writes on the basis of the number of records cached as well as / instead of the time since the last write
-
-  * Writes can be delayed if the server load exceeds a threshold
-
-  * YAPCache provides an API call that can be used to trigger a write out to the database. 
-
-* YAPCache includes an experimental option to send the redirect to the client first and delay the slower work of updated the database until afterwards
-
-* A few minor bugs have been fixed
-
-### Which one should you use?
-
-It's your choice. YAPCache has a few extra features—if you need these, use YAPCache. Yourls-APC-Cache is older and has been in use for several years longer. It is more tested (although not without bugs). YAPCache is based on this mature code, but it does include some substantial changes that as yet have had only limited testing in a production environment.
-
+* APCu Cache is updated to be compatible with the newer YOURLS DB API. It has been tested on YOURLS v1.9.2
 
