@@ -1,16 +1,15 @@
 <?php
 /*
-Plugin Name: YAPCache
-Plugin URI: https://github.com/tipichris/YAPCache
-Description: An APC based cache to reduce database load.
+Plugin Name: APCu Cache
+Plugin URI: https://github.com/RavanH/APCu-Cache
+Description: An APCu based cache to reduce database load.
 Version: 1.0
-Author: Ian Barber, Chris Hastie
-Author URI: http://www.oak-wood.co.uk
+Author: Ian Barber, Chris Hastie, RavanH
 */
 
-// Verify APC is installed, suggested by @ozh
-if( !function_exists( 'apc_exists' ) ) {
-   yourls_die( 'This plugin requires the APC extension: http://pecl.php.net/package/APC' );
+// Verify APCu is installed, suggested by @ozh
+if( ! function_exists( 'apcu_exists' ) ) {
+   yourls_die( 'This plugin requires the APCu extension.' );
 }
 
 // keys for APC storage
@@ -91,9 +90,9 @@ function yapc_shunt_all_options($false) {
 	global $ydb; 
 	
 	$key = YAPC_ALL_OPTIONS; 
-	if(apc_exists($key)) {
-		$ydb->option = apc_fetch($key);
-		$ydb->installed = apc_fetch(YAPC_YOURLS_INSTALLED);
+	if(apcu_exists($key)) {
+		$ydb->option = apcu_fetch($key);
+		$ydb->installed = apcu_fetch(YAPC_YOURLS_INSTALLED);
 		return true;
 	} 
 	
@@ -107,9 +106,9 @@ function yapc_shunt_all_options($false) {
  * @return array options
  */
 function yapc_get_all_options($option) {
-	apc_store(YAPC_ALL_OPTIONS, $option, YAPC_READ_CACHE_TIMEOUT);
+	apcu_store(YAPC_ALL_OPTIONS, $option, YAPC_READ_CACHE_TIMEOUT);
 	// Set timeout on installed property twice as long as the options as otherwise there could be a split second gap
-	apc_store(YAPC_YOURLS_INSTALLED, true, (2 * YAPC_READ_CACHE_TIMEOUT));
+	apcu_store(YAPC_YOURLS_INSTALLED, true, (2 * YAPC_READ_CACHE_TIMEOUT));
 	return $option;
 }
 
@@ -120,7 +119,7 @@ function yapc_get_all_options($option) {
  * @param string $plugin 
  */
 function yapc_option_change($args) {
-	apc_delete(YAPC_ALL_OPTIONS);
+	apcu_delete(YAPC_ALL_OPTIONS);
 }
 
 /**
@@ -134,8 +133,8 @@ function yapc_pre_get_keyword($args) {
 	$use_cache = isset($args[1]) ? $args[1] : true;
 	
 	// Lookup in cache
-	if($use_cache && apc_exists(yapc_get_keyword_key($keyword))) {
-		$ydb->infos[$keyword] = apc_fetch(yapc_get_keyword_key($keyword)); 	
+	if($use_cache && apcu_exists(yapc_get_keyword_key($keyword))) {
+		$ydb->infos[$keyword] = apcu_fetch(yapc_get_keyword_key($keyword)); 	
 	}
 }
 
@@ -147,7 +146,7 @@ function yapc_pre_get_keyword($args) {
  */
 function yapc_get_keyword_infos($info, $keyword) {
 	// Store in cache
-	apc_store(yapc_get_keyword_key($keyword), $info, YAPC_READ_CACHE_TIMEOUT);
+	apcu_store(yapc_get_keyword_key($keyword), $info, YAPC_READ_CACHE_TIMEOUT);
 	return $info;
 }
 
@@ -164,7 +163,7 @@ function yapc_get_keyword_infos($info, $keyword) {
  */
 function yapc_edit_link( $return, $url, $keyword, $newkeyword, $title, $new_url_already_there, $keyword_is_ok ) {
 	if($return['status'] != 'fail') {
-		apc_delete(yapc_get_keyword_key($keyword));
+		apcu_delete(yapc_get_keyword_key($keyword));
 	}
 	return $return;
 }
@@ -178,8 +177,8 @@ function yapc_edit_link( $return, $url, $keyword, $newkeyword, $title, $new_url_
 function yapc_shunt_update_clicks($false, $keyword) {
 	
 	// initalize the timer. 
-	if(!apc_exists(YAPC_CLICK_TIMER)) {
-		apc_add(YAPC_CLICK_TIMER, time());
+	if(!apcu_exists(YAPC_CLICK_TIMER)) {
+		apcu_add(YAPC_CLICK_TIMER, time());
 	}
 	
 	if(defined('YAPC_STATS_SHUNT')) {
@@ -196,8 +195,8 @@ function yapc_shunt_update_clicks($false, $keyword) {
 	// Store in cache
 	$added = false; 
 	$clicks = 1;
-	if(!apc_exists($key)) {
-		$added = apc_add($key, $clicks);
+	if(!apcu_exists($key)) {
+		$added = apcu_add($key, $clicks);
 	}
 	if(!$added) {
 		$clicks = yapc_key_increment($key);
@@ -209,13 +208,13 @@ function yapc_shunt_update_clicks($false, $keyword) {
 	 */
 	$idxkey = YAPC_CLICK_INDEX;
 	yapc_lock_click_index();
-	if(apc_exists($idxkey)) {
-		$clickindex = apc_fetch($idxkey);
+	if(apcu_exists($idxkey)) {
+		$clickindex = apcu_fetch($idxkey);
 	} else {
 		$clickindex = array();
 	}
 	$clickindex[$keyword] = 1;
-	apc_store ( $idxkey, $clickindex);
+	apcu_store ( $idxkey, $clickindex);
 	yapc_unlock_click_index();
 	
 	if(yapc_write_needed('click', $clicks)) {
@@ -233,19 +232,19 @@ function yapc_write_clicks() {
 	yapc_debug("write_clicks: Writing clicks to database");
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
-	if(!apc_add(YAPC_CLICK_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT)) {
+	if(!apcu_add(YAPC_CLICK_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT)) {
 		yapc_debug("write_clicks: Could not lock the click index. Abandoning write", true);
 		return $updates;
 	}
 	
-	if(apc_exists(YAPC_CLICK_INDEX)) {
+	if(apcu_exists(YAPC_CLICK_INDEX)) {
 		yapc_lock_click_index();
-		$clickindex = apc_fetch(YAPC_CLICK_INDEX);
-		if($clickindex === false || !apc_delete(YAPC_CLICK_INDEX)) {
-			// if apc_delete fails it's because the key went away. We probably have a race condition
+		$clickindex = apcu_fetch(YAPC_CLICK_INDEX);
+		if($clickindex === false || !apcu_delete(YAPC_CLICK_INDEX)) {
+			// if apcu_delete fails it's because the key went away. We probably have a race condition
 			yapc_unlock_click_index();
 			yapc_debug("write_clicks: Index key disappeared. Abandoning write", true);
-			apc_store(YAPC_CLICK_TIMER, time());
+			apcu_store(YAPC_CLICK_TIMER, time());
 			return $updates; 
 		}
 		yapc_unlock_click_index();
@@ -258,7 +257,7 @@ function yapc_write_clicks() {
 		foreach ($clickindex as $keyword => $z) {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
-			if(!apc_exists($key)) {
+			if(!apcu_exists($key)) {
 				yapc_debug("write_clicks: Click key $key dissappeared. Possible data loss!", true);
 				continue;
 			}
@@ -274,8 +273,8 @@ function yapc_write_clicks() {
 		yapc_debug("write_clicks: Committing changes");
 		$ydb->query("COMMIT");
 	}
-	apc_store(YAPC_CLICK_TIMER, time());
-	apc_delete(YAPC_CLICK_UPDATE_LOCK);
+	apcu_store(YAPC_CLICK_TIMER, time());
+	apcu_delete(YAPC_CLICK_UPDATE_LOCK);
 	yapc_debug("write_clicks: Updated click records for $updates URLs");
 	return $updates;
 }
@@ -301,8 +300,8 @@ function yapc_shunt_log_redirect($false, $keyword) {
 		return true;
 
 	// Initialise the time.
-	if(!apc_exists(YAPC_LOG_TIMER)) {
-		apc_add(YAPC_LOG_TIMER, time());
+	if(!apcu_exists(YAPC_LOG_TIMER)) {
+		apcu_add(YAPC_LOG_TIMER, time());
 	}
 	$ip = yourls_get_IP();
 	$args = array(
@@ -319,8 +318,8 @@ function yapc_shunt_log_redirect($false, $keyword) {
 	$logindex = 0;
 	$added = false;
 	
-	if(!apc_exists($key)) {
-		$added = apc_add($key, 0);
+	if(!apcu_exists($key)) {
+		$added = apcu_add($key, 0);
 	} 
 	
 
@@ -328,7 +327,7 @@ function yapc_shunt_log_redirect($false, $keyword) {
 
 	
 	// We now have a reserved logindex, so lets cache
-	apc_store(yapc_get_logindex($logindex), $args, YAPC_LONG_TIMEOUT);
+	apcu_store(yapc_get_logindex($logindex), $args, YAPC_LONG_TIMEOUT);
 	
 	// If we've been caching for over a certain amount do write
 	if(yapc_write_needed('log')) {
@@ -346,18 +345,18 @@ function yapc_write_log() {
 	global $ydb;
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
-	if(!apc_add(YAPC_LOG_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT)) {
+	if(!apcu_add(YAPC_LOG_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT)) {
 		yapc_debug("write_log: Could not lock the log index. Abandoning write", true);
 		return $updates;
 	}
 	yapc_debug("write_log: Writing log to database");
 
 	$key = YAPC_LOG_INDEX;
-	$index = apc_fetch($key);
+	$index = apcu_fetch($key);
 	if($index === false) {
 		yapc_debug("write_log: key $key has disappeared. Abandoning write.");
-		apc_store(YAPC_LOG_TIMER, time());
-		apc_delete(YAPC_LOG_UPDATE_LOCK);
+		apcu_store(YAPC_LOG_TIMER, time());
+		apcu_delete(YAPC_LOG_UPDATE_LOCK);
 		return $updates;
 	}
 	$fetched = 0;
@@ -368,7 +367,7 @@ function yapc_write_log() {
 	// Retrieve all items and reset the counter
 	while($loop) {
 		for($i = $fetched+1; $i <= $index; $i++) {
-			$row = apc_fetch(yapc_get_logindex($i));
+			$row = apcu_fetch(yapc_get_logindex($i));
 			if($row === false) {
 				yapc_debug("write_log: log entry " . yapc_get_logindex($i) . " disappeared. Possible data loss!!", true);
 			} else {
@@ -379,11 +378,11 @@ function yapc_write_log() {
 		$fetched = $index;
 		$n++;
 		
-		if(apc_cas($key, $index, 0)) {
+		if(apcu_cas($key, $index, 0)) {
 			$loop = false;
 		} else {
 			usleep(500);
-			$index = apc_fetch($key);
+			$index = apcu_fetch($key);
 		}
 	}
 	yapc_debug("write_log: $fetched log entries retrieved; index reset after $n tries");
@@ -412,8 +411,8 @@ function yapc_write_log() {
 	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
 				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
 				VALUES " . $query);
-	apc_store(YAPC_LOG_TIMER, time());
-	apc_delete(YAPC_LOG_UPDATE_LOCK);
+	apcu_store(YAPC_LOG_TIMER, time());
+	apcu_delete(YAPC_LOG_UPDATE_LOCK);
 	yapc_debug("write_log: Added $updates entries to log");
 	return $updates;
 
@@ -448,7 +447,7 @@ function yapc_get_keyword_key($keyword) {
  */
 function yapc_key_increment($key) {
 	$n = 1;
-	while(!$result = apc_inc($key)) {
+	while(!$result = apcu_inc($key)) {
 		usleep(500);
 		$n++;
 	}
@@ -465,14 +464,14 @@ function yapc_key_increment($key) {
 function yapc_key_zero($key) {
 	$old = 0;
 	$n = 1;
-	$old = apc_fetch($key);
+	$old = apcu_fetch($key);
 	if($old == 0) {
 		return $old;
 	}
-	while(!apc_cas($key, $old, 0)) {
+	while(!apcu_cas($key, $old, 0)) {
 		usleep(500);
 		$n++;
-		$old = apc_fetch($key);
+		$old = apcu_fetch($key);
 		if($old == 0) {
 			yapc_debug("key_zero: Key zeroed by someone else. Try $n. Key $key");
 			return $old;
@@ -490,7 +489,7 @@ function yapc_key_zero($key) {
 function yapc_lock_click_index() {
 	$n = 1;
 	// we always unlock as soon as possilbe, so a TTL of 1 should be fine
-	while(!apc_add(YAPC_CLICK_INDEX_LOCK, 1, 1)) {
+	while(!apcu_add(YAPC_CLICK_INDEX_LOCK, 1, 1)) {
 		$n++;
 		usleep(500);
 	} 
@@ -504,7 +503,7 @@ function yapc_lock_click_index() {
  * @return void
  */
 function yapc_unlock_click_index() {
-	apc_delete(YAPC_CLICK_INDEX_LOCK);
+	apcu_delete(YAPC_CLICK_INDEX_LOCK);
 }
 
 /**
@@ -545,8 +544,8 @@ function yapc_load_too_high() {
  */
 function yapc_click_updates_count() {
 	$count = 0;
-	if(apc_exists(YAPC_CLICK_INDEX)) {
-		$clickindex = apc_fetch(YAPC_CLICK_INDEX);
+	if(apcu_exists(YAPC_CLICK_INDEX)) {
+		$clickindex = apcu_fetch(YAPC_CLICK_INDEX);
 		$count = count($clickindex);
 	}
 	return $count;
@@ -568,7 +567,7 @@ function yapc_write_needed($type, $clicks=0) {
 		$count = yapc_click_updates_count();
 	} elseif ($type = 'log') {
 		$timerkey = YAPC_LOG_TIMER;
-		$count = apc_fetch(YAPC_LOG_INDEX);
+		$count = apcu_fetch(YAPC_LOG_INDEX);
 	} else {
 		return false;
 	}
@@ -577,8 +576,8 @@ function yapc_write_needed($type, $clicks=0) {
 	
 	if (!empty($clicks)) yapc_debug("write_needed: Info: current URL has $clicks cached clicks");
 	
-	if(apc_exists($timerkey)) {
-		$lastupdate = apc_fetch($timerkey);
+	if(apcu_exists($timerkey)) {
+		$lastupdate = apcu_fetch($timerkey);
 		$elapsed = time() - $lastupdate;
 		yapc_debug("write_needed: Info: Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
 		
@@ -596,7 +595,7 @@ function yapc_write_needed($type, $clicks=0) {
 		}
 		
 		// if we've backed off because of server load, don't write
-		if( apc_exists(YAPC_BACKOFF_KEY)) {
+		if( apcu_exists(YAPC_BACKOFF_KEY) ) {
 			yapc_debug("write_needed: False: Won't do write for $type during backoff period");
 			return false;
 		}
@@ -609,7 +608,7 @@ function yapc_write_needed($type, $clicks=0) {
 			// for a short while
 			if(yapc_load_too_high()) {
 				yapc_debug("write_needed: False: System load too high. Won't try writing to database for $type", true);
-				apc_add(YAPC_BACKOFF_KEY, time(), YAPC_BACKOFF_TIME);
+				apcu_add(YAPC_BACKOFF_KEY, time(), YAPC_BACKOFF_TIME);
 				return false;
 			}
 			yapc_debug("write_needed: True: type: $type; count: $count; elapsed: $elapsed; clicks: $clicks; YAPC_WRITE_CACHE_TIMEOUT: " . YAPC_WRITE_CACHE_TIMEOUT . "; YAPC_MAX_UPDATES: " . YAPC_MAX_UPDATES . "; YAPC_MAX_CLICKS: " . YAPC_MAX_CLICKS);
