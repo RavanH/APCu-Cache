@@ -509,7 +509,7 @@ function yapc_lock_click_index() {
  * @return void
  */
 function yapc_unlock_click_index() {
-	apcu_delete( YAPC_CLICK_INDEX_LOCK);
+	apcu_delete( YAPC_CLICK_INDEX_LOCK );
 }
 
 /**
@@ -519,8 +519,8 @@ function yapc_unlock_click_index() {
  * @param bool $important
  * @return void
  */
-function yapc_debug ( $msg, $important=false) {
-	if ( $important || ( defined( 'YAPC_DEBUG' ) && YAPC_DEBUG) ) {
+function yapc_debug ( $msg, $important=false ) {
+	if ( $important || ( defined( 'YAPC_DEBUG' ) && YAPC_DEBUG ) ) {
 		error_log( "yourls_apc_cache: " . $msg);
 	}
 }
@@ -580,7 +580,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 	if ( empty( $count) ) $count = 0;
 	yapc_debug( "write_needed: Info: $count $type updates in cache" );
 
-	if ( !empty( $clicks ) ) yapc_debug( "write_needed: Info: current URL has $clicks cached clicks" );
+	if ( ! empty( $clicks ) ) yapc_debug( "write_needed: Info: current URL has $clicks cached clicks" );
 
 	if ( apcu_exists( $timerkey ) ) {
 		$lastupdate = apcu_fetch( $timerkey );
@@ -595,7 +595,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 		 */
 
 		// if we reached YAPC_WRITE_CACHE_HARD_TIMEOUT force a write out no matter what
-		if ( !empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_HARD_TIMEOUT ) {
+		if ( ! empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_HARD_TIMEOUT ) {
 			yapc_debug( "write_needed: True: Reached hard timeout ( " . YAPC_WRITE_CACHE_HARD_TIMEOUT ." ). Forcing write for $type after $elapsed seconds" );
 			return true;
 		}
@@ -607,9 +607,9 @@ function yapc_write_needed( $type, $clicks=0 ) {
 		}
 
 		// have we either reached YAPC_WRITE_CACHE_TIMEOUT or exceeded YAPC_MAX_UPDATES or YAPC_MAX_CLICKS
-		if (( !empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_TIMEOUT )
-			|| ( !empty( YAPC_MAX_UPDATES) && $count > YAPC_MAX_UPDATES )
-			|| ( !empty( YAPC_MAX_CLICKS) && !empty( $clicks ) && $clicks > YAPC_MAX_CLICKS) ) {
+		if (( ! empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_TIMEOUT )
+			|| ( ! empty( YAPC_MAX_UPDATES) && $count > YAPC_MAX_UPDATES )
+			|| ( ! empty( YAPC_MAX_CLICKS) && ! empty( $clicks ) && $clicks > YAPC_MAX_CLICKS) ) {
 			// if server load is high, delay the write and set a backoff so we won't try again
 			// for a short while
 			if ( yapc_load_too_high() ) {
@@ -661,7 +661,7 @@ function yapc_force_flush() {
 			'errorCode' => 403,
 		);
 	}
-	elseif ( !empty( YAPC_API_USER) && YAPC_API_USER != $user) {
+	elseif ( ! empty( YAPC_API_USER) && YAPC_API_USER != $user) {
 		yapc_debug( "force_flush: Unauthorised attempt to use API flushcache function by $user", true);
 		$return = array(
 			'simple'    => 'Error: User not authorised to use the flushcache function',
