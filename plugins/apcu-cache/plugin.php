@@ -3,7 +3,7 @@
 Plugin Name: APCu Cache
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
-Version: 0.9
+Version: 0.9.2
 Author: Ian Barber, Chris Hastie, RavanH
 Author URI: https://status301.net/
 */
@@ -26,7 +26,7 @@ define( 'YAPC_CLICK_KEY_PREFIX', YAPC_ID . 'clicks-' );
 define( 'YAPC_CLICK_UPDATE_LOCK', YAPC_ID . 'click_update_lock' );
 define( 'YAPC_KEYWORD_PREFIX', YAPC_ID . 'keyword-' );
 define( 'YAPC_ALL_OPTIONS', YAPC_ID . 'get_all_options' );
-define( 'YAPC_YOURLS_INSTALLED', YAPC_ID . 'yourls_installed' );
+//define( 'YAPC_YOURLS_INSTALLED', YAPC_ID . 'yourls_installed' );
 define( 'YAPC_BACKOFF_KEY', YAPC_ID . 'backoff' );
 define( 'YAPC_CLICK_INDEX_LOCK', YAPC_ID . 'click_index_lock' );
 
@@ -73,56 +73,58 @@ if ( defined( 'YAPC_REDIRECT_FIRST' ) && YAPC_REDIRECT_FIRST ) {
 	// as we die at the end of yapc_redirect_shorturl
 	yourls_add_action( 'redirect_shorturl', 'yapc_redirect_shorturl', 999);
 }
-yourls_add_filter( 'shunt_all_options', 'yapc_shunt_all_options' );
-yourls_add_filter( 'get_all_options', 'yapc_get_all_options' );
-yourls_add_action( 'add_option', 'yapc_option_change' );
-yourls_add_action( 'delete_option', 'yapc_option_change' );
-yourls_add_action( 'update_option', 'yapc_option_change' );
-yourls_add_filter( 'edit_link', 'yapc_edit_link' );
+//yourls_add_filter( 'shunt_all_options', 'yapc_shunt_all_options' );
+//yourls_add_action( 'get_all_options', 'yapc_get_all_options' );
+//yourls_add_action( 'add_option', 'yapc_option_change' );
+//yourls_add_action( 'delete_option', 'yapc_option_change' );
+//yourls_add_action( 'update_option', 'yapc_option_change' );
+//yourls_add_filter( 'edit_link', 'yapc_edit_link' );
 yourls_add_filter( 'api_actions', 'yapc_api_filter' );
 
 /**
- * Return cached options is available
+ * Set cached options if available
  *
- * @param bool $false
+ * @param bool $pre
  * @return bool true
  */
-function yapc_shunt_all_options( $false ) {
+function yapc_shunt_all_options( $pre ) {
 	$ydb = yourls_get_db();
 
-	$key = YAPC_ALL_OPTIONS;
-	if ( apcu_exists( $key ) ) {
-		$options = (array) apcu_fetch( $key );
-		foreach ( $options as $_key => $_value ) {
-			$ydb->set_option( $_key, $_value );
+	if ( apcu_exists( YAPC_ALL_OPTIONS ) ) {
+		$options = apcu_fetch( YAPC_ALL_OPTIONS );
+		if ( empty( $options ) || ! is_array( $options ) ) {
+			return $pre;
 		}
-		$ydb->set_installed( apcu_fetch( YAPC_YOURLS_INSTALLED) );
+		foreach ( $options as $name => $value ) {
+			$ydb->set_option( $name, yourls_maybe_unserialize($value) );
+		}
+		//yourls_set_installed( apcu_fetch( YAPC_YOURLS_INSTALLED ) );
+		yourls_set_installed( true );
+
+		yapc_debug( "shunt_all_options: Set options to " . print_r( $options, true ) );
 
 		return true;
 	}
 
-	return false;
+	return $pre;
 }
 
 /**
  * Cache all_options data.
  *
- * @param array $options
- * @return array options
+ * @param string $options
  */
-function yapc_get_all_options( $option ) {
-	apcu_store( YAPC_ALL_OPTIONS, $option, YAPC_READ_CACHE_TIMEOUT );
+function yapc_get_all_options( $options ) {
+	apcu_store( YAPC_ALL_OPTIONS, $options, YAPC_READ_CACHE_TIMEOUT );
 	// Set timeout on installed property twice as long as the options as otherwise there could be a split second gap
-	apcu_store( YAPC_YOURLS_INSTALLED, true, (2 * YAPC_READ_CACHE_TIMEOUT ) );
-
-	return $option;
+	//apcu_store( YAPC_YOURLS_INSTALLED, true, (2 * YAPC_READ_CACHE_TIMEOUT ) );
 }
 
 /**
  * Clear the options cache if an option is altered
  * This covers changes to plugins too
  *
- * @param string $plugin
+ * @param string $args
  */
 function yapc_option_change( $args ) {
 	apcu_delete( YAPC_ALL_OPTIONS );
@@ -223,7 +225,7 @@ function yapc_shunt_update_clicks( $false, $keyword ) {
 		$clickindex = array();
 	}
 	$clickindex[$keyword] = 1;
-	apcu_store ( $idxkey, $clickindex );
+	apcu_store( $idxkey, $clickindex );
 	yapc_unlock_click_index();
 
 	if ( yapc_write_needed( 'click', $clicks ) ) {
@@ -545,11 +547,11 @@ function yapc_load_too_high() {
 	if ( YAPC_MAX_LOAD == 0 )
 		// YAPC_MAX_LOAD of 0 means don't do load check
 		return false;
-	if (stristr(PHP_OS, 'win' ) )
+	if ( stristr( PHP_OS, 'win' ) )
 		// can't get load on Windows, so just assume it's OK
 		return false;
 	$load = sys_getloadavg();
-	if ( $load[0] < YAPC_MAX_LOAD)
+	if ( $load[0] < YAPC_MAX_LOAD )
 		return false;
 
 	return true;
@@ -664,11 +666,9 @@ function yapc_api_filter( $api_actions ) {
  * @return array $return status of updates
  */
 function yapc_force_flush() {
-	/* YAPC_API_USER of false means disable API.
-	 * YAPC_API_USER of empty string means allow
-	 * any user to use API. Otherwise only the specified
-	 * user is allowed
-	 */
+	// YAPC_API_USER of false means disable API.
+	// YAPC_API_USER of empty string means allow any user to use API.
+	// Otherwise only the specified user is allowed.
 	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
 	if ( YAPC_API_USER === false ) {
 		yapc_debug( "force_flush: Attempt to use API flushcache function whilst it is disabled. User: $user", true );
