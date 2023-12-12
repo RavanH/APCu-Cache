@@ -15,7 +15,7 @@ if ( ! function_exists( 'apcu_exists' ) ) {
 
 // keys for APC storage
 if ( ! defined( 'YAPC_ID' ) ) {
-	define( 'YAPC_ID', 'yapcache-' );
+	define( 'YAPC_ID', YOURLS_DB_NAME . '_' . YOURLS_DB_PREFIX . '_' );
 }
 define( 'YAPC_LOG_INDEX', YAPC_ID . 'log_index' );
 define( 'YAPC_LOG_TIMER', YAPC_ID . 'log_timer' );
