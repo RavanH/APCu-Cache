@@ -3,7 +3,7 @@
 Plugin Name: APCu Cache
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
-Version: 0.9.2
+Version: 0.9.3
 Author: Ian Barber, Chris Hastie, RavanH
 Author URI: https://status301.net/
 */
@@ -315,17 +315,17 @@ function yapc_shunt_log_redirect( $false, $keyword ) {
 		return true;
 
 	// Initialise the time.
-	if ( ! apcu_exists( YAPC_LOG_TIMER) ) {
+	if ( ! apcu_exists( YAPC_LOG_TIMER ) ) {
 		apcu_add( YAPC_LOG_TIMER, time() );
 	}
 	$ip = yourls_get_IP();
 	$args = array(
-		date( 'Y-m-d H:i:s' ),
-		yourls_sanitize_keyword( $keyword ),
-		( isset( $_SERVER['HTTP_REFERER'] ) ? yourls_sanitize_url( $_SERVER['HTTP_REFERER'] ) : 'direct' ),
-		yourls_get_user_agent(),
-		$ip,
-		yourls_geo_ip_to_countrycode( $ip )
+		'now' => date( 'Y-m-d H:i:s' ),
+        'keyword'  => yourls_sanitize_keyword($keyword),
+        'referrer' => substr( yourls_get_referrer(), 0, 200 ),
+        'ua'       => substr(yourls_get_user_agent(), 0, 255),
+        'ip'       => $ip,
+        'location' => yourls_geo_ip_to_countrycode($ip),
 	);
 
 	// Separated out the calls to make a bit more readable here
@@ -340,7 +340,7 @@ function yapc_shunt_log_redirect( $false, $keyword ) {
 	$logindex = yapc_key_increment( $key );
 
 	// We now have a reserved logindex, so lets cache
-	apcu_store( yapc_get_logindex( $logindex), $args, YAPC_LONG_TIMEOUT );
+	apcu_store( yapc_get_logindex( $logindex ), $args, YAPC_LONG_TIMEOUT );
 
 	// If we've been caching for over a certain amount do write
 	if ( yapc_write_needed( 'log' ) ) {
@@ -355,7 +355,7 @@ function yapc_shunt_log_redirect( $false, $keyword ) {
  * write any cached log entries out to the database
  */
 function yapc_write_log() {
-	$ydb = yourls_get_db();
+	$table = YOURLS_DB_TABLE_LOG;
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if ( ! apcu_add( YAPC_LOG_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT ) ) {
@@ -382,9 +382,9 @@ function yapc_write_log() {
 	// Retrieve all items and reset the counter
 	while( $loop) {
 		for( $i = $fetched+1; $i <= $index; $i++) {
-			$row = apcu_fetch( yapc_get_logindex( $i) );
+			$row = apcu_fetch( yapc_get_logindex($i) );
 			if ( $row === false ) {
-				yapc_debug( "write_log: log entry " . yapc_get_logindex( $i) . " disappeared. Possible data loss!!", true );
+				yapc_debug( "write_log: log entry " . yapc_get_logindex($i) . " disappeared. Possible data loss!!", true );
 			} else {
 				$values[] = $row;
 			}
@@ -401,31 +401,23 @@ function yapc_write_log() {
 		}
 	}
 	yapc_debug( "write_log: $fetched log entries retrieved; index reset after $n tries" );
-	// Insert all log message - we're assuming input filtering happened earlier
-	$query = "";
 
-	foreach( $values as $value) {
+	// Insert each log message - we're assuming input filtering happened earlier
+	foreach( $values as $value ) {
 		if ( !is_array( $value) ) {
 		  yapc_debug( "write_log: log row is not an array. Skipping" );
 		  continue;
 		}
-		if (strlen( $query) ) {
-			$query .= ",";
+		// Try and log. An error probably means a concurrency problem : just skip the logging
+		try {
+			$result = yourls_get_db()->fetchAffected("INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
+		} catch (Exception $e) {
+			$result = 0;
 		}
-		$row = "( '" .
-			$value[0] . "', '" .
-			$value[1] . "', '" .
-			$value[2] . "', '" .
-			$value[3] . "', '" .
-			$value[4] . "', '" .
-			$value[5] . "' )";
-		yapc_debug( "write_log: row: $row" );
-		$query .= $row;
-		$updates++;
+		yapc_debug( "write_log: " . print_r( $value, true ) );
+		if ( $result ) $updates++;
 	}
-	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "`
-				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
-				VALUES " . $query);
+
 	apcu_store( YAPC_LOG_TIMER, time() );
 	apcu_delete( YAPC_LOG_UPDATE_LOCK);
 	yapc_debug( "write_log: Added $updates entries to log" );
