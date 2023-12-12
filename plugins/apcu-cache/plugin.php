@@ -3,7 +3,7 @@
 Plugin Name: APCu Cache for YOURLS
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
-Version: 0.9.4
+Version: 0.9.5
 Author: Ian Barber, Chris Hastie, RavanH
 Author URI: https://status301.net/
 */
@@ -177,6 +177,7 @@ function yapc_get_keyword_infos( $info, $keyword ) {
 function yapc_edit_link( $return, $url, $keyword ) {
 	if ( $return['status'] != 'fail' ) {
 		apcu_delete( yapc_get_keyword_key( $keyword ) );
+		yapc_debug( "edit_link: Deleted $keyword from cache." );
 	}
 
 	return $return;
@@ -185,10 +186,11 @@ function yapc_edit_link( $return, $url, $keyword ) {
 /**
  * Delete a cache entry for a keyword if that keyword is edited.
  *
- * @param array $keyword
+ * @param array $args
  */
-function yapc_delete_link( $keyword ) {
-	apcu_delete( yapc_get_keyword_key( $keyword ) );
+function yapc_delete_link( $args ) {
+	apcu_delete( yapc_get_keyword_key( $args[0] ) );
+	yapc_debug( 'delete_link: Deleted ' . $args[0] . ' from cache.' );
 }
 
 /**
@@ -253,6 +255,7 @@ function yapc_shunt_update_clicks( $false, $keyword ) {
  */
 function yapc_write_clicks() {
 	$ydb = yourls_get_db();
+	$table = YOURLS_DB_TABLE_URL;
 	yapc_debug( "write_clicks: Writing clicks to database" );
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
@@ -280,7 +283,7 @@ function yapc_write_clicks() {
 		 * up into a single transaction. Reduces the overhead of starting a transaction for each
 		 * query. The down side is that if one query errors we'll loose the log.
 		 */
-		$ydb->query( "START TRANSACTION" );
+		$ydb->fetchAffected( "START TRANSACTION" );
 		foreach ( $clickindex as $keyword => $z) {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
@@ -288,17 +291,19 @@ function yapc_write_clicks() {
 				yapc_debug( "write_clicks: Click key $key dissappeared. Possible data loss!", true );
 				continue;
 			}
+			if ( ! yourls_keyword_is_taken( $keyword ) ) {
+				yapc_debug( "write_clicks: Keyword $keyword does not exist. Skipping." );
+				continue;
+			}
 			$value += yapc_key_zero( $key );
 			yapc_debug( "write_clicks: Adding $value clicks for $keyword" );
 			// Write value to DB
-			$ydb->query( "UPDATE `" .
-							YOURLS_DB_TABLE_URL.
-						"` SET `clicks` = clicks + " . $value .
-						" WHERE `keyword` = '" . $keyword . "'" );
-			$updates++;
+			$result = $ydb->fetchAffected( "UPDATE `$table` SET `clicks` = clicks + :more WHERE `keyword` = :keyword;", array( 'more' => $value, 'keyword' => $keyword ) );
+			
+			$updates += $result;
 		}
 		yapc_debug( "write_clicks: Committing changes" );
-		$ydb->query( "COMMIT" );
+		$ydb->fetchAffected( "COMMIT" );
 	}
 	apcu_store( YAPC_CLICK_TIMER, time() );
 	apcu_delete( YAPC_CLICK_UPDATE_LOCK);
@@ -368,6 +373,7 @@ function yapc_shunt_log_redirect( $false, $keyword ) {
  * write any cached log entries out to the database
  */
 function yapc_write_log() {
+	$ydb = yourls_get_db();
 	$table = YOURLS_DB_TABLE_LOG;
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
@@ -409,31 +415,43 @@ function yapc_write_log() {
 		if ( apcu_cas( $key, $index, 0 ) ) {
 			$loop = false;
 		} else {
-			usleep(500 );
+			usleep( 500 );
 			$index = apcu_fetch( $key );
 		}
 	}
 	yapc_debug( "write_log: $fetched log entries retrieved; index reset after $n tries" );
 
+	/**
+	 * As long as the tables support transactions, it's much faster to wrap all the updates
+	 * up into a single transaction. Reduces the overhead of starting a transaction for each
+	 * query. The down side is that if one query errors we'll loose the log.
+	 */
+	$ydb->fetchAffected( "START TRANSACTION" );
+
 	// Insert each log message - we're assuming input filtering happened earlier
 	foreach( $values as $value ) {
 		if ( ! is_array( $value ) ) {
-			yapc_debug( "write_log: log row is not an array. Skipping" );
+			yapc_debug( "write_log: log row is not an array. Skipping." );
 			continue;
 		}
-		if ( ! isset( $value['keyword'] ) || ! yourls_keyword_is_taken( $value['keyword'] ) ) {
-			yapc_debug( "write_log: keyword does not exist. Skipping" );
+		$keyword = isset( $value['keyword'] ) ? $value['keyword'] : '';
+		if ( empty( $keyword ) || ! yourls_keyword_is_taken( $keyword ) ) {
+			yapc_debug( "write_log: keyword $keyword does not exist. Skipping." );
 			continue;
 		}
+
+		yapc_debug( "write_log: Adding log entry for $keyword" );
 		// Try and log. An error probably means a concurrency problem : just skip the logging
 		try {
-			$result = yourls_get_db()->fetchAffected( "INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
+			$result = $ydb->fetchAffected( "INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
 		} catch (Exception $e) {
 			$result = 0;
 		}
-		//yapc_debug( "write_log: " . print_r( $value, true ) );
-		if ( $result ) $updates++;
+
+		$updates += $result;
 	}
+	yapc_debug( "write_log: Committing changes" );
+	$ydb->fetchAffected( "COMMIT" );
 
 	apcu_store( YAPC_LOG_TIMER, time() );
 	apcu_delete( YAPC_LOG_UPDATE_LOCK );
