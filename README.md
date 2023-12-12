@@ -37,7 +37,7 @@ There are four separate caches operated by the plugin:
 
 ### Flushing the cache with an API call
 
-It is also possible to manually flush the cache out to the database using an API call. If your YOURLS installation is private you will need to authenticate in the usual way. If `YAPC_API_USER` is defined and not empty only the user defined can flush the cache. To flush you [construct an API call in the usual way](http://yourls.org/#API) using the action `flushcache`. eg
+It is also possible to manually flush the cache out to the database using an API call. If your YOURLS installation is private you will need to authenticate in the usual way. If `YAPC_API_USER` is defined and not empty only the user defined can flush the cache. To flush you [construct an API call in the usual way](https://yourls.org/docs/guide/advanced/passwordless-api) using the action `flushcache`. eg
 
 ```
 http://your-own-domain-here.com/yourls-api.php?action=flushcache&signature=1002a612b4
