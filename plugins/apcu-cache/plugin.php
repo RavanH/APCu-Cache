@@ -88,13 +88,15 @@ yourls_add_filter( 'api_actions', 'yapc_api_filter' );
  * @return bool true
  */
 function yapc_shunt_all_options( $false) {
+	$ydb = yourls_get_db();
+
 	$key = YAPC_ALL_OPTIONS;
 	if ( apcu_exists( $key) ) {
 		$options = (array) apcu_fetch( $key);
 		foreach ( $options as $_key => $_value ) {
-			yourls_get_db()->set_option( $_key, $_value );
+			$ydb->set_option( $_key, $_value );
 		}
-		yourls_get_db()->set_installed( apcu_fetch( YAPC_YOURLS_INSTALLED) );
+		$ydb->set_installed( apcu_fetch( YAPC_YOURLS_INSTALLED) );
 		return true;
 	}
 
@@ -130,12 +132,13 @@ function yapc_option_change( $args) {
  * @param string $args
  */
 function yapc_pre_get_keyword( $args) {
+	$ydb = yourls_get_db();
 	$keyword = $args[0];
 	$use_cache = isset( $args[1]) ? $args[1] : true;
 
 	// Lookup in cache
 	if ( $use_cache && apcu_exists( yapc_get_keyword_key( $keyword) ) ) {
-		yourls_get_db()->set_infos( $keyword, apcu_fetch( yapc_get_keyword_key( $keyword) ) );
+		$ydb->set_infos( $keyword, apcu_fetch( yapc_get_keyword_key( $keyword) ) );
 	}
 }
 
@@ -230,6 +233,7 @@ function yapc_shunt_update_clicks( $false, $keyword ) {
  * write any cached clicks out to the database
  */
 function yapc_write_clicks() {
+	$ydb = yourls_get_db();
 	yapc_debug("write_clicks: Writing clicks to database");
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
@@ -255,7 +259,7 @@ function yapc_write_clicks() {
 		 * up into a single transaction. Reduces the overhead of starting a transaction for each
 		 * query. The down side is that if one query errors we'll loose the log.
 		 */
-		yourls_get_db()->query("START TRANSACTION");
+		$ydb->query("START TRANSACTION");
 		foreach ( $clickindex as $keyword => $z) {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
@@ -266,14 +270,14 @@ function yapc_write_clicks() {
 			$value += yapc_key_zero( $key);
 			yapc_debug("write_clicks: Adding $value clicks for $keyword");
 			// Write value to DB
-			yourls_get_db()->query("UPDATE `" .
+			$ydb->query("UPDATE `" .
 							YOURLS_DB_TABLE_URL.
 						"` SET `clicks` = clicks + " . $value .
 						" WHERE `keyword` = '" . $keyword . "'");
 			$updates++;
 		}
 		yapc_debug("write_clicks: Committing changes");
-		yourls_get_db()->query("COMMIT");
+		$ydb->query("COMMIT");
 	}
 	apcu_store( YAPC_CLICK_TIMER, time() );
 	apcu_delete( YAPC_CLICK_UPDATE_LOCK);
@@ -344,6 +348,7 @@ function yapc_shunt_log_redirect( $false, $keyword) {
  * write any cached log entries out to the database
  */
 function yapc_write_log() {
+	$ydb = yourls_get_db();
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if ( ! apcu_add( YAPC_LOG_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT ) ) {
@@ -409,7 +414,7 @@ function yapc_write_log() {
 		$query .= $row;
 		$updates++;
 	}
-	yourls_get_db()->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "`
+	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "`
 				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
 				VALUES " . $query);
 	apcu_store( YAPC_LOG_TIMER, time() );
