@@ -3,14 +3,14 @@
 Plugin Name: APCu Cache for YOURLS
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
-Version: 0.9.3
+Version: 0.9.4
 Author: Ian Barber, Chris Hastie, RavanH
 Author URI: https://status301.net/
 */
 
 // Verify APCu is installed, suggested by @ozh
 if ( ! function_exists( 'apcu_exists' ) ) {
-   yourls_die( 'This plugin requires the APCu extension: https://pecl.php.net/package/APCu' );
+	yourls_die( 'This plugin requires the APCu extension: https://pecl.php.net/package/APCu' );
 }
 
 // keys for APC storage
@@ -187,7 +187,7 @@ function yapc_edit_link( $return, $url, $keyword ) {
  *
  * @param array $keyword
  */
-function yapc_edit_link( $keyword ) {
+function yapc_delete_link( $keyword ) {
 	apcu_delete( yapc_get_keyword_key( $keyword ) );
 }
 
