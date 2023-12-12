@@ -78,7 +78,7 @@ if ( defined( 'YAPC_REDIRECT_FIRST' ) && YAPC_REDIRECT_FIRST ) {
 //yourls_add_action( 'add_option', 'yapc_option_change' );
 //yourls_add_action( 'delete_option', 'yapc_option_change' );
 //yourls_add_action( 'update_option', 'yapc_option_change' );
-//yourls_add_filter( 'edit_link', 'yapc_edit_link' );
+yourls_add_filter( 'edit_link', 'yapc_edit_link', 10, 3 );
 yourls_add_filter( 'api_actions', 'yapc_api_filter' );
 
 /**
@@ -136,6 +136,10 @@ function yapc_option_change( $args ) {
  * @param string $args
  */
 function yapc_pre_get_keyword( $args ) {
+	if ( defined( 'YOURLS_ADMIN' ) && YOURLS_ADMIN ) {
+		// Skip if on admin.
+		return;
+	}
 	$ydb = yourls_get_db();
 	$keyword = $args[0];
 	$use_cache = isset( $args[1]) ? $args[1] : true;
@@ -143,6 +147,7 @@ function yapc_pre_get_keyword( $args ) {
 	// Lookup in cache
 	if ( $use_cache && apcu_exists( yapc_get_keyword_key( $keyword ) ) ) {
 		$ydb->set_infos( $keyword, apcu_fetch( yapc_get_keyword_key( $keyword ) ) );
+		error_log( $keyword );
 	}
 }
 
@@ -163,14 +168,8 @@ function yapc_get_keyword_infos( $info, $keyword ) {
  * Delete a cache entry for a keyword if that keyword is edited.
  *
  * @param array $return
- * @param string $url
- * @param string $keyword
- * @param string $newkeyword
- * @param string $title
- * @param bool $new_url_already_there
- * @param bool $keyword_is_ok
  */
-function yapc_edit_link( $return, $url, $keyword, $newkeyword, $title, $new_url_already_there, $keyword_is_ok ) {
+function yapc_edit_link( $return, $url, $keyword ) {
 	if ( $return['status'] != 'fail' ) {
 		apcu_delete( yapc_get_keyword_key( $keyword ) );
 	}
@@ -591,7 +590,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 	if ( apcu_exists( $timerkey ) ) {
 		$lastupdate = apcu_fetch( $timerkey );
 		$elapsed = time() - $lastupdate;
-		yapc_debug( "write_needed: Info: Last $type write $elapsed seconds ago at " . date( "%T" , $lastupdate ) );
+		yapc_debug( "write_needed: Info: Last $type write $elapsed seconds ago at " . date( "H:i:s" , $lastupdate ) );
 
 		/**
 		 * In the tests below YAPC_WRITE_CACHE_TIMEOUT of 0 means never do a write on the basis of
