@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: APCu Cache
+Plugin Name: APCu Cache for YOURLS
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
 Version: 0.9.3
@@ -26,7 +26,6 @@ define( 'YAPC_CLICK_KEY_PREFIX', YAPC_ID . 'clicks-' );
 define( 'YAPC_CLICK_UPDATE_LOCK', YAPC_ID . 'click_update_lock' );
 define( 'YAPC_KEYWORD_PREFIX', YAPC_ID . 'keyword-' );
 define( 'YAPC_ALL_OPTIONS', YAPC_ID . 'get_all_options' );
-//define( 'YAPC_YOURLS_INSTALLED', YAPC_ID . 'yourls_installed' );
 define( 'YAPC_BACKOFF_KEY', YAPC_ID . 'backoff' );
 define( 'YAPC_CLICK_INDEX_LOCK', YAPC_ID . 'click_index_lock' );
 
@@ -79,6 +78,7 @@ if ( defined( 'YAPC_REDIRECT_FIRST' ) && YAPC_REDIRECT_FIRST ) {
 //yourls_add_action( 'delete_option', 'yapc_option_change' );
 //yourls_add_action( 'update_option', 'yapc_option_change' );
 yourls_add_filter( 'edit_link', 'yapc_edit_link', 10, 3 );
+yourls_add_action( 'delete_link', 'yapc_delete_link' );
 yourls_add_filter( 'api_actions', 'yapc_api_filter' );
 
 /**
@@ -91,17 +91,19 @@ function yapc_shunt_all_options( $pre ) {
 	$ydb = yourls_get_db();
 
 	if ( apcu_exists( YAPC_ALL_OPTIONS ) ) {
+
 		$options = apcu_fetch( YAPC_ALL_OPTIONS );
 		if ( empty( $options ) || ! is_array( $options ) ) {
 			return $pre;
 		}
+
 		foreach ( $options as $name => $value ) {
 			$ydb->set_option( $name, yourls_maybe_unserialize($value) );
 		}
-		//yourls_set_installed( apcu_fetch( YAPC_YOURLS_INSTALLED ) );
+
 		yourls_set_installed( true );
 
-		yapc_debug( "shunt_all_options: Set options to " . print_r( $options, true ) );
+		//yapc_debug( "shunt_all_options: Set options to " . print_r( $options, true ) );
 
 		return true;
 	}
@@ -116,8 +118,6 @@ function yapc_shunt_all_options( $pre ) {
  */
 function yapc_get_all_options( $options ) {
 	apcu_store( YAPC_ALL_OPTIONS, $options, YAPC_READ_CACHE_TIMEOUT );
-	// Set timeout on installed property twice as long as the options as otherwise there could be a split second gap
-	//apcu_store( YAPC_YOURLS_INSTALLED, true, (2 * YAPC_READ_CACHE_TIMEOUT ) );
 }
 
 /**
@@ -136,10 +136,11 @@ function yapc_option_change( $args ) {
  * @param string $args
  */
 function yapc_pre_get_keyword( $args ) {
+	// Skip if on admin.
 	if ( defined( 'YOURLS_ADMIN' ) && YOURLS_ADMIN ) {
-		// Skip if on admin.
 		return;
 	}
+
 	$ydb = yourls_get_db();
 	$keyword = $args[0];
 	$use_cache = isset( $args[1]) ? $args[1] : true;
@@ -147,7 +148,6 @@ function yapc_pre_get_keyword( $args ) {
 	// Lookup in cache
 	if ( $use_cache && apcu_exists( yapc_get_keyword_key( $keyword ) ) ) {
 		$ydb->set_infos( $keyword, apcu_fetch( yapc_get_keyword_key( $keyword ) ) );
-		error_log( $keyword );
 	}
 }
 
@@ -158,6 +158,11 @@ function yapc_pre_get_keyword( $args ) {
  * @param string $keyword
  */
 function yapc_get_keyword_infos( $info, $keyword ) {
+	// Skip if on admin.
+	if ( defined( 'YOURLS_ADMIN' ) && YOURLS_ADMIN ) {
+		return $info;
+	}
+
 	// Store in cache
 	apcu_store( yapc_get_keyword_key( $keyword ), $info, YAPC_READ_CACHE_TIMEOUT );
 
@@ -175,6 +180,15 @@ function yapc_edit_link( $return, $url, $keyword ) {
 	}
 
 	return $return;
+}
+
+/**
+ * Delete a cache entry for a keyword if that keyword is edited.
+ *
+ * @param array $keyword
+ */
+function yapc_edit_link( $keyword ) {
+	apcu_delete( yapc_get_keyword_key( $keyword ) );
 }
 
 /**
@@ -403,22 +417,26 @@ function yapc_write_log() {
 
 	// Insert each log message - we're assuming input filtering happened earlier
 	foreach( $values as $value ) {
-		if ( !is_array( $value) ) {
-		  yapc_debug( "write_log: log row is not an array. Skipping" );
-		  continue;
+		if ( ! is_array( $value ) ) {
+			yapc_debug( "write_log: log row is not an array. Skipping" );
+			continue;
+		}
+		if ( ! isset( $value['keyword'] ) || ! yourls_keyword_is_taken( $value['keyword'] ) ) {
+			yapc_debug( "write_log: keyword does not exist. Skipping" );
+			continue;
 		}
 		// Try and log. An error probably means a concurrency problem : just skip the logging
 		try {
-			$result = yourls_get_db()->fetchAffected("INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
+			$result = yourls_get_db()->fetchAffected( "INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
 		} catch (Exception $e) {
 			$result = 0;
 		}
-		yapc_debug( "write_log: " . print_r( $value, true ) );
+		//yapc_debug( "write_log: " . print_r( $value, true ) );
 		if ( $result ) $updates++;
 	}
 
 	apcu_store( YAPC_LOG_TIMER, time() );
-	apcu_delete( YAPC_LOG_UPDATE_LOCK);
+	apcu_delete( YAPC_LOG_UPDATE_LOCK );
 	yapc_debug( "write_log: Added $updates entries to log" );
 
 	return $updates;
@@ -466,7 +484,7 @@ function yapc_key_increment( $key ) {
  * Reset a key to 0 in a atomic manner
  *
  * @param string $key
- * @return old value before the reset
+ * @return int old value before the reset
  */
 function yapc_key_zero( $key ) {
 	$old = 0;
@@ -476,7 +494,7 @@ function yapc_key_zero( $key ) {
 		return $old;
 	}
 	while( ! apcu_cas( $key, $old, 0 ) ) {
-		usleep(500 );
+		usleep( 500 );
 		$n++;
 		$old = apcu_fetch( $key );
 		if ( $old == 0 ) {
@@ -485,7 +503,7 @@ function yapc_key_zero( $key ) {
 			return $old;
 		}
 	}
-	if ( $n > 1) yapc_debug( "key_zero: Key $key zeroed from $old after $n tries" );
+	if ( $n > 1 ) yapc_debug( "key_zero: Key $key zeroed from $old after $n tries" );
 
 	return $old;
 }
@@ -525,7 +543,7 @@ function yapc_unlock_click_index() {
  */
 function yapc_debug( $msg, $important=false ) {
 	if ( $important || ( defined( 'YAPC_DEBUG' ) && YAPC_DEBUG ) ) {
-		error_log( "yourls_apcu_cache: " . $msg);
+		error_log( "yourls_apcu_cache: " . $msg );
 	}
 }
 
@@ -542,25 +560,12 @@ function yapc_load_too_high() {
 		// can't get load on Windows, so just assume it's OK
 		return false;
 	$load = sys_getloadavg();
-	if ( $load[0] < YAPC_MAX_LOAD )
+	if ( $load[0] < YAPC_MAX_LOAD ) {
 		return false;
+	}
+	yapc_debug( "load_too_high: " . $load[0] );
 
 	return true;
-}
-
-/**
- * Count number of click updates that are cached
- *
- * @return int number of keywords with cached clicks
- */
-function yapc_click_updates_count() {
-	$count = 0;
-	if ( apcu_exists( YAPC_CLICK_INDEX ) ) {
-		$clickindex = apcu_fetch( YAPC_CLICK_INDEX );
-		$count = count( $clickindex );
-	}
-
-	return $count;
 }
 
 /**
@@ -575,14 +580,14 @@ function yapc_write_needed( $type, $clicks=0 ) {
 
 	if ( $type == 'click' ) {
 		$timerkey = YAPC_CLICK_TIMER;
-		$count = yapc_click_updates_count();
+		$count = apcu_exists( YAPC_CLICK_INDEX ) ? count( apcu_fetch( YAPC_CLICK_INDEX ) ) : 0;
 	} elseif ( $type = 'log' ) {
 		$timerkey = YAPC_LOG_TIMER;
-		$count = apcu_fetch( YAPC_LOG_INDEX );
+		$count = apcu_exists( YAPC_LOG_INDEX ) ? apcu_fetch( YAPC_LOG_INDEX ) : 0;
 	} else {
 		return false;
 	}
-	if ( empty( $count) ) $count = 0;
+
 	yapc_debug( "write_needed: Info: $count $type updates in cache" );
 
 	if ( ! empty( $clicks ) ) yapc_debug( "write_needed: Info: current URL has $clicks cached clicks" );
@@ -599,26 +604,26 @@ function yapc_write_needed( $type, $clicks=0 ) {
 		 * clicks pending.
 		 */
 
-		// if we reached YAPC_WRITE_CACHE_HARD_TIMEOUT force a write out no matter what
+		// If we reached YAPC_WRITE_CACHE_HARD_TIMEOUT force a write out no matter what.
 		if ( ! empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_HARD_TIMEOUT ) {
 			yapc_debug( "write_needed: True: Reached hard timeout ( " . YAPC_WRITE_CACHE_HARD_TIMEOUT ." ). Forcing write for $type after $elapsed seconds" );
 
 			return true;
 		}
 
-		// if we've backed off because of server load, don't write
+		// If we've backed off because of server load, don't write.
 		if ( apcu_exists( YAPC_BACKOFF_KEY) ) {
 			yapc_debug( "write_needed: False: Won't do write for $type during backoff period" );
 
 			return false;
 		}
 
-		// have we either reached YAPC_WRITE_CACHE_TIMEOUT or exceeded YAPC_MAX_UPDATES or YAPC_MAX_CLICKS
+		// Have we either reached YAPC_WRITE_CACHE_TIMEOUT or exceeded YAPC_MAX_UPDATES or YAPC_MAX_CLICKS
 		if (( ! empty( YAPC_WRITE_CACHE_TIMEOUT ) && $elapsed > YAPC_WRITE_CACHE_TIMEOUT )
 			|| ( ! empty( YAPC_MAX_UPDATES) && $count > YAPC_MAX_UPDATES )
 			|| ( ! empty( YAPC_MAX_CLICKS) && ! empty( $clicks ) && $clicks > YAPC_MAX_CLICKS) ) {
-			// if server load is high, delay the write and set a backoff so we won't try again
-			// for a short while
+			// If server load is high, delay the write and set a backoff so we won't try again
+			// for a short while.
 			if ( yapc_load_too_high() ) {
 				yapc_debug( "write_needed: False: System load too high. Won't try writing to database for $type", true );
 				apcu_add( YAPC_BACKOFF_KEY, time(), YAPC_BACKOFF_TIME);
@@ -633,7 +638,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 		return false;
 	}
 
-	// The timer key went away. Better do an update to be safe
+	// The timer key went away. Better do an update to be safe.
 	yapc_debug( "write_needed: True: reason: no $type timer found" );
 
 	return true;
