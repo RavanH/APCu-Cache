@@ -184,7 +184,7 @@ function yapc_edit_link( $return, $url, $keyword, $newkeyword, $title, $new_url_
  */
 function yapc_shunt_update_clicks( $false, $keyword ) {
 
-	// initalize the timer.
+	// Initalize the timer.
 	if ( ! apcu_exists( YAPC_CLICK_TIMER ) ) {
 		apcu_add( YAPC_CLICK_TIMER, time() );
 	}
@@ -200,7 +200,7 @@ function yapc_shunt_update_clicks( $false, $keyword ) {
 	$keyword = yourls_sanitize_keyword( $keyword );
 	$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 
-	// Store in cache
+	// Store in cache.
 	$added = false;
 	$clicks = 1;
 	if ( ! apcu_exists( $key ) ) {
@@ -532,7 +532,7 @@ function yapc_unlock_click_index() {
  */
 function yapc_debug( $msg, $important=false ) {
 	if ( $important || ( defined( 'YAPC_DEBUG' ) && YAPC_DEBUG ) ) {
-		error_log( "yourls_apc_cache: " . $msg);
+		error_log( "yourls_apcu_cache: " . $msg);
 	}
 }
 
@@ -687,11 +687,15 @@ function yapc_force_flush() {
 		);
 	} else {
 		yapc_debug( "force_flush: Forcing write to database from API call" );
+		// Write log.
 		$start = microtime( true );
 		$log_updates = yapc_write_log();
 		$log_time = sprintf( "%01.3f", 1000*(microtime( true ) - $start) );
+		// Write clicks.
+		$start = microtime( true );
 		$click_updates = yapc_write_clicks();
 		$click_time = sprintf( "%01.3f", 1000*(microtime( true ) - $start) );
+
 		$return = array(
 			'clicksUpdated'   => $click_updates,
 			'clickUpdateTime' => $click_time,
