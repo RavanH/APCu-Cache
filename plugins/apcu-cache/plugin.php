@@ -10,7 +10,7 @@ Author URI: https://status301.net/
 
 // Verify APCu is installed, suggested by @ozh
 if ( ! function_exists( 'apcu_exists' ) ) {
-   yourls_die( 'This plugin requires the APCu extension.' );
+   yourls_die( 'This plugin requires the APCu extension: https://pecl.php.net/package/APCu' );
 }
 
 // keys for APC storage
@@ -564,7 +564,7 @@ function yapc_click_updates_count() {
 	$count = 0;
 	if ( apcu_exists( YAPC_CLICK_INDEX ) ) {
 		$clickindex = apcu_fetch( YAPC_CLICK_INDEX );
-		$count = count( $clickindex);
+		$count = count( $clickindex );
 	}
 
 	return $count;
@@ -616,7 +616,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 		// if we've backed off because of server load, don't write
 		if ( apcu_exists( YAPC_BACKOFF_KEY) ) {
 			yapc_debug( "write_needed: False: Won't do write for $type during backoff period" );
-			return
+
 			return false;
 		}
 
