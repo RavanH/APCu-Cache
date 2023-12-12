@@ -238,7 +238,7 @@ function yapc_write_clicks() {
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if ( ! apcu_add( YAPC_CLICK_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT ) ) {
-		yapc_debug( "write_clicks: Could not lock the click index. Abandoning write", true);
+		yapc_debug( "write_clicks: Could not lock the click index. Abandoning write", true );
 		return $updates;
 	}
 
@@ -248,7 +248,7 @@ function yapc_write_clicks() {
 		if ( $clickindex === false || ! apcu_delete( YAPC_CLICK_INDEX ) ) {
 			// if apcu_delete fails it's because the key went away. We probably have a race condition
 			yapc_unlock_click_index();
-			yapc_debug( "write_clicks: Index key disappeared. Abandoning write", true);
+			yapc_debug( "write_clicks: Index key disappeared. Abandoning write", true );
 			apcu_store( YAPC_CLICK_TIMER, time() );
 			return $updates;
 		}
@@ -264,7 +264,7 @@ function yapc_write_clicks() {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
 			if ( ! apcu_exists( $key ) ) {
-				yapc_debug( "write_clicks: Click key $key dissappeared. Possible data loss!", true);
+				yapc_debug( "write_clicks: Click key $key dissappeared. Possible data loss!", true );
 				continue;
 			}
 			$value += yapc_key_zero( $key );
@@ -352,14 +352,14 @@ function yapc_write_log() {
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if ( ! apcu_add( YAPC_LOG_UPDATE_LOCK, 1, YAPC_LOCK_TIMEOUT ) ) {
-		yapc_debug( "write_log: Could not lock the log index. Abandoning write", true);
+		yapc_debug( "write_log: Could not lock the log index. Abandoning write", true );
 		return $updates;
 	}
 	yapc_debug( "write_log: Writing log to database" );
 
 	$key = YAPC_LOG_INDEX;
 	$index = apcu_fetch( $key );
-	if ( $index === false) {
+	if ( $index === false ) {
 		yapc_debug( "write_log: key $key has disappeared. Abandoning write." );
 		apcu_store( YAPC_LOG_TIMER, time() );
 		apcu_delete( YAPC_LOG_UPDATE_LOCK);
@@ -374,8 +374,8 @@ function yapc_write_log() {
 	while( $loop) {
 		for( $i = $fetched+1; $i <= $index; $i++) {
 			$row = apcu_fetch( yapc_get_logindex( $i) );
-			if ( $row === false) {
-				yapc_debug( "write_log: log entry " . yapc_get_logindex( $i) . " disappeared. Possible data loss!!", true);
+			if ( $row === false ) {
+				yapc_debug( "write_log: log entry " . yapc_get_logindex( $i) . " disappeared. Possible data loss!!", true );
 			} else {
 				$values[] = $row;
 			}
@@ -519,7 +519,7 @@ function yapc_unlock_click_index() {
  * @param bool $important
  * @return void
  */
-function yapc_debug ( $msg, $important=false ) {
+function yapc_debug( $msg, $important=false ) {
 	if ( $important || ( defined( 'YAPC_DEBUG' ) && YAPC_DEBUG ) ) {
 		error_log( "yourls_apc_cache: " . $msg);
 	}
@@ -613,7 +613,7 @@ function yapc_write_needed( $type, $clicks=0 ) {
 			// if server load is high, delay the write and set a backoff so we won't try again
 			// for a short while
 			if ( yapc_load_too_high() ) {
-				yapc_debug( "write_needed: False: System load too high. Won't try writing to database for $type", true);
+				yapc_debug( "write_needed: False: System load too high. Won't try writing to database for $type", true );
 				apcu_add( YAPC_BACKOFF_KEY, time(), YAPC_BACKOFF_TIME);
 				return false;
 			}
@@ -653,8 +653,8 @@ function yapc_force_flush() {
 	 * user is allowed
 	 */
 	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
-	if ( YAPC_API_USER === false) {
-		yapc_debug( "force_flush: Attempt to use API flushcache function whilst it is disabled. User: $user", true);
+	if ( YAPC_API_USER === false ) {
+		yapc_debug( "force_flush: Attempt to use API flushcache function whilst it is disabled. User: $user", true );
 		$return = array(
 			'simple'    => 'Error: The flushcache function is disabled',
 			'message'   => 'Error: The flushcache function is disabled',
@@ -662,7 +662,7 @@ function yapc_force_flush() {
 		);
 	}
 	elseif ( ! empty( YAPC_API_USER) && YAPC_API_USER != $user) {
-		yapc_debug( "force_flush: Unauthorised attempt to use API flushcache function by $user", true);
+		yapc_debug( "force_flush: Unauthorised attempt to use API flushcache function by $user", true );
 		$return = array(
 			'simple'    => 'Error: User not authorised to use the flushcache function',
 			'message'   => 'Error: User not authorised to use the flushcache function',
@@ -670,18 +670,18 @@ function yapc_force_flush() {
 		);
 	} else {
 		yapc_debug( "force_flush: Forcing write to database from API call" );
-		$start = microtime(true);
+		$start = microtime( true );
 		$log_updates = yapc_write_log();
-		$log_time = sprintf( "%01.3f", 1000*(microtime(true) - $start) );
+		$log_time = sprintf( "%01.3f", 1000*(microtime( true ) - $start) );
 		$click_updates = yapc_write_clicks();
-		$click_time = sprintf( "%01.3f", 1000*(microtime(true) - $start) );
+		$click_time = sprintf( "%01.3f", 1000*(microtime( true ) - $start) );
 		$return = array(
 			'clicksUpdated'   => $click_updates,
 			'clickUpdateTime' => $click_time,
 			'logsUpdated' => $log_updates,
 			'logUpdateTime' => $log_time,
 			'statusCode' => 200,
-			'simple'     => "Updated clicks for $click_updates URLs in ${click_time} ms. Logged $log_updates hits in ${log_time} ms.",
+			'simple'     => "Updated clicks for $click_updates URLs in $click_time ms. Logged $log_updates hits in $log_time ms.",
 			'message'    => 'Success',
 		);
 	}
@@ -715,13 +715,13 @@ function yapc_redirect_shorturl( $args ) {
 		yourls_redirect_javascript( $location );
 	}
 
-	$start = microtime(true);
+	$start = microtime( true );
 	// Update click count in main table
 	$update_clicks = yourls_update_clicks( $keyword );
 
 	// Update detailed log for stats
 	$log_redirect = yourls_log_redirect( $keyword );
-	$lapsed = sprintf( "%01.3f", 1000*(microtime(true) - $start) );
+	$lapsed = sprintf( "%01.3f", 1000*(microtime( true ) - $start) );
 	yapc_debug( "redirect_shorturl: Database updates took $lapsed ms after sending redirect" );
 
 	die();
