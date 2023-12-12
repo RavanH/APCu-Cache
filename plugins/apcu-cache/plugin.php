@@ -193,7 +193,7 @@ function yapc_shunt_update_clicks( $false, $keyword ) {
 		}
 	}
 
-	$keyword = yourls_sanitize_string( $keyword );
+	$keyword = yourls_sanitize_keyword( $keyword );
 	$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 
 	// Store in cache
@@ -312,7 +312,7 @@ function yapc_shunt_log_redirect( $false, $keyword ) {
 	$ip = yourls_get_IP();
 	$args = array(
 		date( 'Y-m-d H:i:s' ),
-		yourls_sanitize_string( $keyword ),
+		yourls_sanitize_keyword( $keyword ),
 		( isset( $_SERVER['HTTP_REFERER'] ) ? yourls_sanitize_url( $_SERVER['HTTP_REFERER'] ) : 'direct' ),
 		yourls_get_user_agent(),
 		$ip,
