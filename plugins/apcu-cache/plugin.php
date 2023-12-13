@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: APCu Cache for YOURLS
+Plugin Name: APCu Cache
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
 Version: 0.9.5
@@ -10,12 +10,12 @@ Author URI: https://status301.net/
 
 // Verify APCu is installed, suggested by @ozh
 if ( ! function_exists( 'apcu_exists' ) ) {
-	yourls_die( 'This plugin requires the APCu extension: https://pecl.php.net/package/APCu' );
+	throw new Exception( 'This plugin requires the <a href=https://pecl.php.net/package/APCu target=_blank>APCu extension</a>.' );
 }
 
 // keys for APC storage
 if ( ! defined( 'YAPC_ID' ) ) {
-	define( 'YAPC_ID', YOURLS_DB_NAME . '_' . YOURLS_DB_PREFIX . '_' );
+	define( 'YAPC_ID', YOURLS_SITE . '-' );
 }
 define( 'YAPC_LOG_INDEX', YAPC_ID . 'log_index' );
 define( 'YAPC_LOG_TIMER', YAPC_ID . 'log_timer' );
@@ -62,7 +62,7 @@ if ( ! defined( 'YAPC_API_USER' ) ) {
 }
 
 yourls_add_action( 'pre_get_keyword', 'yapc_pre_get_keyword' );
-yourls_add_filter( 'get_keyword_infos', 'yapc_get_keyword_infos' );
+yourls_add_filter( 'get_keyword_infos', 'yapc_get_keyword_infos', 10, 2 );
 if ( ! defined( 'YAPC_SKIP_CLICKTRACK' ) ) {
 	yourls_add_filter( 'shunt_update_clicks', 'yapc_shunt_update_clicks' );
 	yourls_add_filter( 'shunt_log_redirect', 'yapc_shunt_log_redirect' );
@@ -136,18 +136,17 @@ function yapc_option_change( $args ) {
  * @param string $args
  */
 function yapc_pre_get_keyword( $args ) {
-	// Skip if on admin.
-	if ( defined( 'YOURLS_ADMIN' ) && YOURLS_ADMIN ) {
-		return;
-	}
-
 	$ydb = yourls_get_db();
 	$keyword = $args[0];
 	$use_cache = isset( $args[1]) ? $args[1] : true;
+	$key = yapc_get_keyword_key( $keyword );
 
 	// Lookup in cache
-	if ( $use_cache && apcu_exists( yapc_get_keyword_key( $keyword ) ) ) {
-		$ydb->set_infos( $keyword, apcu_fetch( yapc_get_keyword_key( $keyword ) ) );
+	if ( $use_cache && apcu_exists( $key ) ) {
+		$info = apcu_fetch( $key );
+		if ( ! empty( $info ) ) {
+			$ydb->set_infos( $keyword, $info );
+		}
 	}
 }
 
@@ -158,13 +157,11 @@ function yapc_pre_get_keyword( $args ) {
  * @param string $keyword
  */
 function yapc_get_keyword_infos( $info, $keyword ) {
-	// Skip if on admin.
-	if ( defined( 'YOURLS_ADMIN' ) && YOURLS_ADMIN ) {
-		return $info;
-	}
-
 	// Store in cache
-	apcu_store( yapc_get_keyword_key( $keyword ), $info, YAPC_READ_CACHE_TIMEOUT );
+	if ( ! empty( $info ) ) {
+		apcu_store( yapc_get_keyword_key( $keyword ), $info, YAPC_READ_CACHE_TIMEOUT );
+		yapc_debug( "get_keyword_infos: Add key $keyword to the cache." );
+	}
 
 	return $info;
 }
@@ -283,7 +280,7 @@ function yapc_write_clicks() {
 		 * up into a single transaction. Reduces the overhead of starting a transaction for each
 		 * query. The down side is that if one query errors we'll loose the log.
 		 */
-		$ydb->fetchAffected( "START TRANSACTION" );
+		$ydb->beginTransaction();
 		foreach ( $clickindex as $keyword => $z) {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
@@ -303,7 +300,7 @@ function yapc_write_clicks() {
 			$updates += $result;
 		}
 		yapc_debug( "write_clicks: Committing changes" );
-		$ydb->fetchAffected( "COMMIT" );
+		$ydb->commit();
 	}
 	apcu_store( YAPC_CLICK_TIMER, time() );
 	apcu_delete( YAPC_CLICK_UPDATE_LOCK);
@@ -426,7 +423,7 @@ function yapc_write_log() {
 	 * up into a single transaction. Reduces the overhead of starting a transaction for each
 	 * query. The down side is that if one query errors we'll loose the log.
 	 */
-	$ydb->fetchAffected( "START TRANSACTION" );
+	$ydb->beginTransaction();
 
 	// Insert each log message - we're assuming input filtering happened earlier
 	foreach( $values as $value ) {
@@ -451,7 +448,7 @@ function yapc_write_log() {
 		$updates += $result;
 	}
 	yapc_debug( "write_log: Committing changes" );
-	$ydb->fetchAffected( "COMMIT" );
+	$ydb->commit();
 
 	apcu_store( YAPC_LOG_TIMER, time() );
 	apcu_delete( YAPC_LOG_UPDATE_LOCK );
