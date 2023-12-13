@@ -16,7 +16,7 @@ Installation
 2. Copy the `plugins/yapcache` folder into your `user/plugins` folder for YOURLS
 3. Set up the parameters for APCu Cache in your YOURLS configuration file, `user/config.php` ([see below](#configuration))
 4. Copy the `cache.php` file into `user/`
-5. There is no need to activate this plugin (by the same token, deactivating it via the admin panel will not disable it—to do that remove or rename `user/cache.php`)
+5. There is no need to activate this plugin (by the same token, deactivating it via the admin panel will not disable it—to do that, remove or rename `user/cache.php`)
 
 A recent version of APCu is required.
 
@@ -30,6 +30,7 @@ There are four separate caches operated by the plugin:
 **Keyword Cache**: A read cache which caches the keyword -> long URL look up in APC. This is done on request, and by default is cached for about one hour. This period is configurable with `YAPC_READ_CACHE_TIMEOUT`. This cache will be destroyed if updates are made to the keyword.
 
 **Options Cache**: A read cache which caches YOURLS options in APC to avoid the need to retrieve these from the database at every request. Cache period is defined by `YAPC_READ_CACHE_TIMEOUT` and is one hour by default. This cache will be destroyed if any options are updated.
+NOTICE: The Options Cache is currently broken and remains in waiting of the creation of a [new hook in YOURLS](https://github.com/YOURLS/YOURLS/issues/3682).
 
 **Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `YAPC_WRITE_CACHE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `YAPC_MAX_UPDATES` (default 200). Additionally, if the number of clicks stored for a single URL exceeds `YAPC_MAX_CLICKS` all clicks are written to the database. Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `YAPC_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
 
