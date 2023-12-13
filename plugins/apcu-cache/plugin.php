@@ -3,7 +3,7 @@
 Plugin Name: APCu Cache
 Plugin URI: https://github.com/RavanH/APCu-Cache
 Description: An APCu based cache to reduce database load.
-Version: 0.9.5
+Version: 0.9.6
 Author: Ian Barber, Chris Hastie, RavanH
 Author URI: https://status301.net/
 */
