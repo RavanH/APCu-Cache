@@ -295,9 +295,10 @@ function yapc_write_clicks() {
 			$value += yapc_key_zero( $key );
 			yapc_debug( "write_clicks: Adding $value clicks for $keyword" );
 			// Write value to DB
-			$result = $ydb->fetchAffected( "UPDATE `$table` SET `clicks` = clicks + :more WHERE `keyword` = :keyword;", array( 'more' => $value, 'keyword' => $keyword ) );
+			$ydb->perform( "UPDATE `$table` SET `clicks` = clicks + :more WHERE `keyword` = :keyword", array( 'more' => $value, 'keyword' => $keyword ) );
+			//$result = $ydb->fetchAffected( "UPDATE `$table` SET `clicks` = clicks + :more WHERE `keyword` = :keyword;", array( 'more' => $value, 'keyword' => $keyword ) );
 			
-			$updates += $result;
+			$updates++;
 		}
 		yapc_debug( "write_clicks: Committing changes" );
 		$ydb->commit();
@@ -422,9 +423,11 @@ function yapc_write_log() {
 	 * As long as the tables support transactions, it's much faster to wrap all the updates
 	 * up into a single transaction. Reduces the overhead of starting a transaction for each
 	 * query. The down side is that if one query errors we'll loose the log.
+	 * 
+	 * Thanks @bcc (Ben Charlton) for improved SQL with prepare/execute.
 	 */
 	$ydb->beginTransaction();
-
+	$stmt = $ydb->prepare( "INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:click, :short, :ref, :ua, :ip, :cc)" );
 	// Insert each log message - we're assuming input filtering happened earlier
 	foreach( $values as $value ) {
 		if ( ! is_array( $value ) ) {
@@ -438,14 +441,18 @@ function yapc_write_log() {
 		}
 
 		yapc_debug( "write_log: Adding log entry for $keyword" );
-		// Try and log. An error probably means a concurrency problem : just skip the logging
-		try {
-			$result = $ydb->fetchAffected( "INSERT INTO `$table` (click_time, shorturl, referrer, user_agent, ip_address, country_code) VALUES (:now, :keyword, :referrer, :ua, :ip, :location)", $value );
-		} catch (Exception $e) {
-			$result = 0;
-		}
+		$stmt->execute(
+			array(
+				'click' => $value[0],
+				'short' => $value[1],
+				'ref' => $value[2],
+				'ua' => $value[3],
+				'ip' => $value[4],
+				'cc' => $value[5]
+			)
+		);
 
-		$updates += $result;
+		$updates++;
 	}
 	yapc_debug( "write_log: Committing changes" );
 	$ydb->commit();
